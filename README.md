@@ -1,28 +1,50 @@
-# Module-1-Homework
-data engineering zoomcamp
+cat <<EOF > README.md
+# Module 1 Homework: Docker, SQL, and Terraform
+**Course:** Data Engineering Zoomcamp 2026  
+**Batch:** 2026
 
-Start Services with Docker Compose
-docker-compose up
+This repository contains the solutions for Homework #1. The project demonstrates how to containerize an ingestion pipeline (ETL) using Docker and perform SQL analysis on New York City taxi data.
 
-Build the Docker Image
+---
+
+## 🚀 Infrastructure Setup
+
+### 1. Start the Database
+Use Docker Compose to launch PostgreSQL and pgAdmin in the background:
+\`\`\`bash
+docker-compose up -d
+\`\`\`
+
+### 2. Build the Ingestion Image
+Build a custom Docker image that contains the Python ETL script:
+\`\`\`bash
 docker build -t taxi_ingest:v001 .
+\`\`\`
 
-
-Running the Ingestion Script with Docker Compose
-docker run -it \
-    --network=pipeline_default \
-    taxi_ingest:v001 \
-    --pg-user=root \
-    --pg-pass=root \
-    --pg-host=pgdatabase \
-    --pg-db=ny_taxi \
-    --year=2025 \
-    --month=11 \
+### 3. Run the Ingestion Pipeline
+Execute the container to download and upload Green Taxi data for November 2025:
+\`\`\`bash
+docker run -it \\
+    --network=pipeline_default \\
+    taxi_ingest:v001 \\
+    --pg-user=root \\
+    --pg-pass=root \\
+    --pg-host=pgdatabase \\
+    --pg-port=5432 \\
+    --pg-db=ny_taxi \\
+    --year=2025 \\
+    --month=11 \\
     --target-table=green_taxi_data
+\`\`\`
 
-Question 3. Counting short trips
-For the trips in November 2025 (lpep_pickup_datetime between '2025-11-01' and '2025-12-01', exclusive of the upper bound), how many trips had a trip_distance of less than or equal to 1 mile?
+---
 
+## 📊 SQL Analysis & Solutions
+
+### Question 3: Counting short trips
+*How many trips in November 2025 had a trip distance of less than or equal to 1 mile?*
+
+\`\`\`sql
 SELECT 
     COUNT(1)
 FROM 
@@ -31,11 +53,12 @@ WHERE
     lpep_pickup_datetime >= '2025-11-01' 
     AND lpep_pickup_datetime < '2025-12-01'
     AND trip_distance <= 1.0;
+\`\`\`
 
-Question 4. Longest trip for each day
-Which was the pick up day with the longest trip distance? Only consider trips with trip_distance less than 100 miles (to exclude data errors).
-Use the pick up time for your calculations.
+### Question 4: Longest trip for each day
+*Which was the pick-up day with the longest trip distance? (Considering trips < 100 miles).*
 
+\`\`\`sql
 SELECT 
     lpep_pickup_datetime::DATE AS pickup_day,
     MAX(trip_distance) AS max_distance
@@ -48,9 +71,12 @@ GROUP BY
 ORDER BY 
     max_distance DESC
 LIMIT 1;
+\`\`\`
 
-Question 5. Biggest pickup zone
-Which was the pickup zone with the largest total_amount (sum of all trips) on November 18th, 2025?
+### Question 5: Biggest pickup zone
+*Which was the pickup zone with the largest total_amount (sum of all trips) on November 18th, 2025?*
+
+\`\`\`sql
 SELECT 
     z."Zone" AS pickup_zone,
     SUM(t.total_amount) AS total_amount_sum
@@ -65,10 +91,12 @@ GROUP BY
 ORDER BY 
     2 DESC
 LIMIT 1;
+\`\`\`
 
-Question 6. Largest tip
-For the passengers picked up in the zone named "East Harlem North" in November 2025, which was the drop off zone that had the largest tip?
-Note: it's tip, not trip. We need the name of the zone, not the ID.
+### Question 6: Largest tip
+*For passengers picked up in "East Harlem North" in November 2025, which drop-off zone had the largest tip?*
+
+\`\`\`sql
 SELECT 
     do_z."Zone" AS dropoff_zone,
     MAX(t.tip_amount) AS max_tip
@@ -87,3 +115,13 @@ GROUP BY
 ORDER BY 
     2 DESC
 LIMIT 1;
+\`\`\`
+
+---
+
+## 🛠 Tech Stack
+* **Docker & Docker Compose** — Infrastructure orchestration.
+* **Python (Pandas, SQLAlchemy, Click)** — ETL logic and data processing.
+* **PostgreSQL** — Relational database for data storage.
+* **SQL** — Data analysis and transformations.
+EOF
