@@ -1,0 +1,47 @@
+# Module 1 — Homework 2: Kestra + GCP Backfill 🔧
+
+A focused guide for running the Kestra backfill flows and using the GCP Console (UI) to answer the homework questions about NYC taxi data (Green & Yellow).
+
+---
+
+## Key files
+- Flows: `flows/01_gcp_kv.yaml`, `flows/02_gcp_setup.yaml`, `flows/03_gcp_taxi_backfill.yaml`
+- Local compose: `docker-compose.yaml`
+
+## Prerequisites ✅
+- Docker and Docker Compose available to run the local Kestra stack.
+- A GCP service account JSON saved locally as `service-account.json` (DO NOT commit this file). Encode the service account as a base64 string and store it in `.env_encoded` for the local stack (use your preferred method to encode the file).
+
+## Start local infra
+From the `Homework_2` folder:
+
+```bash
+docker-compose up -d
+```
+
+This starts Kestra and any local dependencies required to run and test the flows.
+
+---
+
+## Flows overview 🔁
+- `01_gcp_kv.yaml` — create a Kestra key-value secret that stores the encoded GCP service account.
+- `02_gcp_setup.yaml` — provision GCP resources required for the backfill (project, buckets, policies).
+- `03_gcp_taxi_backfill.yaml` — scheduled backfill flow that downloads taxi CSVs (from DataTalksClub releases) and writes to GCS/BigQuery.
+
+The flow downloads release artifacts using the template:
+
+```
+https://github.com/DataTalksClub/nyc-tlc-data/releases/download/{{inputs.taxi}}/{{render(vars.file)}}.gz
+```
+
+`vars.file` renders to names such as `green_tripdata_2020-04.csv`.
+
+---
+
+## Running the flows 🚀
+1. **Set GCP secret**: Run `01_gcp_kv.yaml` to create the GCP service account secret in Kestra.
+2. **Provision GCP resources**: Run `02_gcp_setup.yaml` to create the necessary GCP resources.
+3. **Backfill taxi data**: Run `03_gcp_taxi_backfill.yaml` to start the backfill process with yellow  start: 2021-01-01 00:00:00 end: 2021-08-01 00:00:00
+4. **Backfill taxi data**: Run `03_gcp_taxi_backfill.yaml` to start the backfill process with green  start: 2021-01-01 00:00:00 end: 2021-08-01 00:00:00
+    - You can monitor the flow execution from the Kestra UI at `http://localhost:8080`.
+    - Optionally, add a label `backfill:true` to track executions created via a backfill.
