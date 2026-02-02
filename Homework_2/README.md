@@ -18,6 +18,14 @@ docker-compose up -d
 ### 2. Set the GCP secret in Kestra
 Use `flows/01_gcp_kv.yaml` in the Kestra UI to create a key-value secret that stores your encoded GCP service account (do not commit raw `service-account.json`).
 
+If you need to encode your local service account file for the local stack, run the following to append the encoded value to `.env_encoded`:
+
+```bash
+echo SECRET_GCP_SERVICE_ACCOUNT=$(cat service-account.json | base64 -w 0) >> .env_encoded
+```
+
+Store `.env_encoded` securely and do not commit it to the repository.
+
 ### 3. Provision cloud resources (optional)
 Use `flows/02_gcp_setup.yaml` to provision GCP resources required for the backfill, or create them manually via the GCP Console.
 
