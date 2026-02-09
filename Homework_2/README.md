@@ -1,3 +1,64 @@
+start the local kestra stack
+docker-compose up -d
+
+set the gcp secret in kestra (use flows/01_gcp_kv.yaml)
+echo SECRET_GCP_SERVICE_ACCOUNT=$(cat service-account.json | base64 -w 0) >> .env_encoded
+
+flows:
+- 01_gcp_kv.yaml — create gcp kv secret that stores the encoded GCP service account
+- 02_gcp_setup.yaml — provision GCP resources (project, buckets, policies)
+- 03_gcp_taxi_backfill.yaml — download taxi CSVs and write to GCS/BigQuery
+
+Q1 — Uncompressed file size for `yellow_tripdata_2020-12.csv`
+If the CSV is loaded into BigQuery as `yellow_tripdata_202012`, check table metadata:
+
+SELECT table_name, row_count, size_bytes
+FROM `your_project.your_dataset`.INFORMATION_SCHEMA.TABLES
+WHERE table_name = 'yellow_tripdata_202012';
+
+Q2 — Rendered `vars.file` when `taxi=green`, `year=2020`, `month=04`
+Answer: green_tripdata_2020-04.csv
+
+Q3 — Total rows for Yellow taxi in 2020
+Option A — exact count across monthly wildcard tables:
+
+SELECT COUNT(*) AS total_rows
+FROM `your_project.your_dataset`.yellow_tripdata_*
+WHERE _TABLE_SUFFIX BETWEEN '202001' AND '202012';
+
+Option B — if you have a merged table with a `filename` column (cheaper):
+
+SELECT COUNT(*) AS total_rows
+FROM `your_project.your_dataset`.yellow_tripdata
+WHERE filename LIKE 'yellow_tripdata_2020-%.csv';
+
+Option C — metadata-only estimate (cheap):
+
+SELECT SUM(row_count) AS approx_total_rows
+FROM `your_project.your_dataset`.INFORMATION_SCHEMA.TABLES
+WHERE table_name LIKE 'yellow_tripdata_%'
+  AND REGEXP_EXTRACT(table_name, r'(\\d{6})$') BETWEEN '202001' AND '202012';
+
+Q4 — Total rows for Green taxi in 2020
+Replace `yellow` with `green` in the queries above.
+
+Q5 — Rows in `yellow_tripdata_2021-03`
+If monthly tables exist:
+
+SELECT COUNT(*) AS march_2021_rows
+FROM `your_project.your_dataset`.yellow_tripdata_*
+WHERE _TABLE_SUFFIX = '202103';
+
+Q6 — Configure timezone to New York in a Schedule trigger
+Add `timezone: "America/New_York"` to the trigger block, for example:
+
+triggers:
+- id: daily_backfill
+  type: schedule
+  cron: "0 0 * * *"
+  timezone: "America/New_York"
+
+tech stack: Kestra, Google Cloud (BigQuery & Cloud Storage), Docker Compose
 # Module 1 Homework: Kestra Backfill & GCP (BigQuery / Cloud Storage)
 **Course:** Data Engineering Zoomcamp 2026  
 **Batch:** 2026
@@ -49,10 +110,10 @@ https://github.com/DataTalksClub/nyc-tlc-data/releases/download/{{inputs.taxi}}/
 ---
 
 ## 📊 SQL Analysis & Solutions
-Below are concise BigQuery SQL snippets you can paste into the **BigQuery** Console to answer Q1–Q5 and a YAML snippet for Q6.
+Below are concise BigQuery SQL snippets you can paste into the **BigQuery** Console to answer Q1–Q5 and a YAML snippet for Q6. Use `your_project.your_dataset` as a placeholder for your project and dataset.
 
 ### Q1 — Uncompressed file size for `yellow_tripdata_2020-12.csv`
-If the CSV was loaded into BigQuery as `yellow_tripdata_202012`, check table metadata:
+If the CSV was loaded into BigQuery as `yellow_tripdata_202012`, check table metadata (storage size in bytes and row count):
 
 ```sql
 SELECT table_name, row_count, size_bytes
@@ -60,11 +121,11 @@ FROM `your_project.your_dataset`.INFORMATION_SCHEMA.TABLES
 WHERE table_name = 'yellow_tripdata_202012';
 ```
 
-### Q2 — Rendered value of `vars.file` when `taxi=green`, `year=2020`, `month=04`
+### Q2 — Rendered `vars.file` when `taxi=green`, `year=2020`, `month=04`
 - **Answer:** `green_tripdata_2020-04.csv`.
 
 ### Q3 — Total rows for Yellow taxi in 2020
-Exact count across monthly wildcard tables:
+Option A — exact count across monthly wildcard tables (may scan a lot of bytes):
 
 ```sql
 SELECT COUNT(*) AS total_rows
@@ -72,7 +133,15 @@ FROM `your_project.your_dataset.yellow_tripdata_*`
 WHERE _TABLE_SUFFIX BETWEEN '202001' AND '202012';
 ```
 
-Cheaper alternative (metadata):
+Option B — if you have a merged table with a `filename` column (cheaper to run):
+
+```sql
+SELECT COUNT(*) AS total_rows
+FROM `your_project.your_dataset.yellow_tripdata`
+WHERE filename LIKE 'yellow_tripdata_2020-%.csv';
+```
+
+Option C — metadata-only estimate (cheap):
 
 ```sql
 SELECT SUM(row_count) AS approx_total_rows
@@ -81,22 +150,41 @@ WHERE table_name LIKE 'yellow_tripdata_%'
   AND REGEXP_EXTRACT(table_name, r'(\d{6})$') BETWEEN '202001' AND '202012';
 ```
 
+> Note: `COUNT(*)` on large tables can be costly — use the Query Validator to estimate bytes scanned.
+
 ### Q4 — Total rows for Green taxi in 2020
-Replace `yellow` with `green` in Q3 queries:
+Same options as Q3, but replace `yellow` with `green`.
 
 ```sql
+-- wildcard exact count
 SELECT COUNT(*) AS total_rows
 FROM `your_project.your_dataset.green_tripdata_*`
 WHERE _TABLE_SUFFIX BETWEEN '202001' AND '202012';
 ```
 
+```sql
+-- merged table
+SELECT COUNT(*) AS total_rows
+FROM `your_project.your_dataset.green_tripdata`
+WHERE filename LIKE 'green_tripdata_2020-%.csv';
+```
+
 ### Q5 — Rows in `yellow_tripdata_2021-03`
-If monthly tables use suffix `202103`:
+If monthly tables are available (suffix `202103`):
 
 ```sql
 SELECT COUNT(*) AS march_2021_rows
 FROM `your_project.your_dataset.yellow_tripdata_*`
 WHERE _TABLE_SUFFIX = '202103';
+```
+
+If data is in a consolidated table with a pickup timestamp column:
+
+```sql
+SELECT COUNT(*) AS march_2021_rows
+FROM `your_project.your_dataset.yellow_tripdata`
+WHERE EXTRACT(YEAR FROM pickup_datetime) = 2021
+  AND EXTRACT(MONTH FROM pickup_datetime) = 3;
 ```
 
 ### Q6 — Configure timezone to New York in a Schedule trigger
